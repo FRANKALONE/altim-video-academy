@@ -6,28 +6,13 @@ import { VideoCard } from '@/components/VideoCard';
 import { VideoModal } from '@/components/VideoModal';
 import { getAllVideos } from '@/app/actions';
 import { useSession } from 'next-auth/react';
-
-type UIVideo = {
-    id: string;
-    title: string;
-    url: string;
-    thumbnail: string;
-    categories: string[];
-    duration: string;
-    author: string;
-    uploadDate: string;
-    description: string;
-    series?: string;
-    views: number;
-    featured: boolean;
-    successStory: boolean;
-};
+import { Video } from '@/lib/video-data';
 
 export default function PildorasPage() {
     const { data: session } = useSession();
-    const [videos, setVideos] = useState<UIVideo[]>([]);
+    const [videos, setVideos] = useState<Video[]>([]);
     const [loading, setLoading] = useState(true);
-    const [selectedVideo, setSelectedVideo] = useState<UIVideo | null>(null);
+    const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
     const [favorites, setFavorites] = useState<Set<string>>(new Set());
     const [filterCategory, setFilterCategory] = useState<string>('');
     const [filterSeries, setFilterSeries] = useState<string>('');
@@ -36,7 +21,7 @@ export default function PildorasPage() {
         const loadVideos = async () => {
             setLoading(true);
             const dbVideos = await getAllVideos();
-            const mapped: UIVideo[] = dbVideos.map((v: any) => ({
+            const mapped: Video[] = dbVideos.map((v: any) => ({
                 id: v.id,
                 title: v.title,
                 url: v.urlVimeo,
@@ -48,8 +33,8 @@ export default function PildorasPage() {
                 description: v.description || '',
                 series: v.series,
                 views: 0,
-                featured: v.featured || false,
-                successStory: v.successStory || false
+                featured: v.featured,
+                successStory: v.successStory
             }));
             setVideos(mapped);
             setLoading(false);

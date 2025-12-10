@@ -6,30 +6,15 @@ import { Navbar } from '@/components/Navbar';
 import { VideoCard } from '@/components/VideoCard';
 import { VideoModal } from '@/components/VideoModal';
 import { getAllVideos } from '@/app/actions';
-
-type UIVideo = {
-    id: string;
-    title: string;
-    url: string;
-    thumbnail: string;
-    categories: string[];
-    duration: string;
-    author: string;
-    uploadDate: string;
-    description: string;
-    series?: string;
-    views: number;
-    featured: boolean;
-    successStory: boolean;
-};
+import { Video } from '@/lib/video-data';
 
 export default function CategoryDetailPage() {
     const params = useParams();
     const categoryName = decodeURIComponent(params.slug as string);
 
-    const [videos, setVideos] = useState<UIVideo[]>([]);
+    const [videos, setVideos] = useState<Video[]>([]);
     const [loading, setLoading] = useState(true);
-    const [selectedVideo, setSelectedVideo] = useState<UIVideo | null>(null);
+    const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
     const [favorites, setFavorites] = useState<Set<string>>(new Set());
 
     useEffect(() => {
@@ -38,7 +23,7 @@ export default function CategoryDetailPage() {
             const dbVideos = await getAllVideos();
             const filtered = dbVideos.filter((v: any) => v.categories?.includes(categoryName));
 
-            const mapped: UIVideo[] = filtered.map((v: any) => ({
+            const mapped: Video[] = filtered.map((v: any) => ({
                 id: v.id,
                 title: v.title,
                 url: v.urlVimeo,
@@ -50,8 +35,8 @@ export default function CategoryDetailPage() {
                 description: v.description || '',
                 series: v.series,
                 views: 0,
-                featured: v.featured || false,
-                successStory: v.successStory || false
+                featured: v.featured,
+                successStory: v.successStory
             }));
 
             setVideos(mapped);
