@@ -9,7 +9,7 @@ type SeriesWithCount = {
     id: string;
     title: string;
     videoCount: number;
-    thumbnail: string | null;
+    thumbnail: string;
 };
 
 export default function SeriesPage() {
