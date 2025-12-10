@@ -8,7 +8,7 @@ import { getAllVideos, getCategories } from '@/app/actions';
 type CategoryWithCount = {
     name: string;
     videoCount: number;
-    thumbnail: string | null;
+    thumbnail: string;
 };
 
 export default function CategoriasPage() {
