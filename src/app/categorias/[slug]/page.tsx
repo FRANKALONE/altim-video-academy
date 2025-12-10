@@ -11,12 +11,12 @@ type UIVideo = {
     id: string;
     title: string;
     url: string;
-    thumbnail: string | null;
+    thumbnail: string;
     categories: string[];
-    duration: string | null;
+    duration: string;
     author: string;
     uploadDate: string;
-    description: string | null;
+    description: string;
     series?: string;
     views: number;
     featured: boolean;
@@ -42,12 +42,12 @@ export default function CategoryDetailPage() {
                 id: v.id,
                 title: v.title,
                 url: v.urlVimeo,
-                thumbnail: v.thumbnailUrl,
+                thumbnail: v.thumbnailUrl || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=800&q=80',
                 categories: v.categories || [],
                 duration: v.duration || '00:00',
                 author: v.author || 'Altim',
                 uploadDate: new Date(v.createdAt).toLocaleDateString('es-ES'),
-                description: v.description,
+                description: v.description || '',
                 series: v.series,
                 views: 0,
                 featured: v.featured || false,
