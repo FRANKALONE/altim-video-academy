@@ -7,29 +7,11 @@ import { useSession } from 'next-auth/react';
 import { Navbar } from '@/components/Navbar';
 import { VideoCard } from '@/components/VideoCard';
 import { VideoModal } from '@/components/VideoModal';
-// Remove mock data, use types only?
-import type { Video as MockVideoType } from '@/lib/video-data';
+import { Video } from '@/lib/video-data';
 import { getAllVideos, getSeries, getCategories } from '@/app/actions';
 
-// UI Interface matching Actions return (converted)
-interface UIVideo {
-    id: string;
-    title: string;
-    url: string;
-    thumbnail: string;
-    categories: string[];
-    duration: string;
-    author: string;
-    uploadDate: string;
-    description: string;
-    views: number;
-    featured: boolean;
-    successStory: boolean;
-    series?: string;
-}
-
 // Helper to check permissions (Simplified / Mock logic kept for "Client" filtering until Auth is fully RBAC DB backed)
-function canViewVideo(video: UIVideo, userRole?: string, userClient?: string) {
+function canViewVideo(video: Video, userRole?: string, userClient?: string) {
     if (userRole === 'ADMIN') return true;
 
     // For now, allow all videos if no permissions logic is enforced strictly yet
@@ -55,10 +37,10 @@ function SearchContent() {
     const [query, setQuery] = useState(initialQuery);
     const [selectedSeries, setSelectedSeries] = useState(initialSeries);
     const [selectedCategory, setSelectedCategory] = useState(initialCategory);
-    const [playingVideo, setPlayingVideo] = useState<UIVideo | null>(null);
+    const [playingVideo, setPlayingVideo] = useState<Video | null>(null);
 
     // DB Data
-    const [videos, setVideos] = useState<UIVideo[]>([]);
+    const [videos, setVideos] = useState<Video[]>([]);
     const [seriesList, setSeriesList] = useState<string[]>([]);
     const [categoriesList, setCategoriesList] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
@@ -74,7 +56,7 @@ function SearchContent() {
                 ]);
 
                 // Map format
-                const mapped: UIVideo[] = dbVideos.map((v: any) => ({
+                const mapped: Video[] = dbVideos.map((v: any) => ({
                     id: v.id,
                     title: v.title,
                     url: v.urlVimeo,

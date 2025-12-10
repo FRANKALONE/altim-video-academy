@@ -34,7 +34,7 @@ export default function Home() {
         ]);
 
         // Map DB Video to UI Video
-        const mapped: UIVideo[] = dbVideos.map((v: any) => ({
+        const mapped: Video[] = dbVideos.map((v: any) => ({
           id: v.id,
           title: v.title,
           url: v.urlVimeo,
