@@ -7,33 +7,18 @@ import { VideoCard } from '@/components/VideoCard';
 import { VideoModal } from '@/components/VideoModal';
 import { HeroBanner } from '@/components/HeroBanner';
 import { getAllVideos, getSeries, getCategories } from '@/app/actions';
-
-interface UIVideo {
-  id: string;
-  title: string;
-  url: string;
-  thumbnail: string;
-  categories: string[];
-  duration: string;
-  author: string;
-  uploadDate: string;
-  description: string;
-  views: number;
-  featured: boolean;
-  successStory: boolean;
-  series?: string;
-}
+import { Video } from '@/lib/video-data';
 
 type CategoryWithVideos = {
   name: string;
-  videos: UIVideo[];
+  videos: Video[];
   totalCount: number;
 };
 
 export default function Home() {
-  const [playingVideo, setPlayingVideo] = useState<UIVideo | null>(null);
+  const [playingVideo, setPlayingVideo] = useState<Video | null>(null);
   const [favorites, setFavorites] = useState<string[]>([]);
-  const [videos, setVideos] = useState<UIVideo[]>([]);
+  const [videos, setVideos] = useState<Video[]>([]);
   const [seriesList, setSeriesList] = useState<any[]>([]);
   const [topCategories, setTopCategories] = useState<CategoryWithVideos[]>([]);
   const [loading, setLoading] = useState(true);
