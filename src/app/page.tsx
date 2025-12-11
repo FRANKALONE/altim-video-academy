@@ -15,6 +15,8 @@ type CategoryWithVideos = {
   totalCount: number;
 };
 
+export const dynamic = 'force-dynamic';
+
 export default function Home() {
   const [playingVideo, setPlayingVideo] = useState<Video | null>(null);
   const [favorites, setFavorites] = useState<string[]>([]);
