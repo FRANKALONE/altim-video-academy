@@ -48,7 +48,8 @@ export async function getAllVideos() {
         // Get series name
         let seriesName: string | undefined = undefined;
         if (v.seriesId) {
-            const s = await db.select({ title: series.title }).from(series).where(eq(series.id, v.seriesId)).get();
+            const results = await db.select({ title: series.title }).from(series).where(eq(series.id, v.seriesId));
+            const s = results[0];
             seriesName = s?.title || undefined;
         }
 
@@ -79,18 +80,15 @@ export async function createVideo(data: Omit<NewVideo, 'id' | 'createdAt'> & { c
         duration: '00:00'
     });
 
-    // 2. Link Categories (Find or Create?)
-    // For now, assume categories exist or we create them? Requirements said "Create Single & Bulk".
-    // Let's try to find ID by name.
+    // 2. Link Categories (Only use existing ones, don't auto-create)
     for (const catName of data.categories) {
-        let cat = await db.select().from(categories).where(eq(categories.name, catName)).get();
-        if (!cat) {
-            // Create if not exists (Auto-create tags)
-            const catId = crypto.randomUUID();
-            await db.insert(categories).values({ id: catId, name: catName });
-            cat = { id: catId, name: catName };
+        const catResults = await db.select().from(categories).where(eq(categories.name, catName));
+        const cat = catResults[0];
+        if (cat) {
+            // Only link if category exists
+            await db.insert(videoCategories).values({ videoId: newId, categoryId: cat.id });
         }
-        await db.insert(videoCategories).values({ videoId: newId, categoryId: cat.id });
+        // Skip if category doesn't exist (don't auto-create)
     }
 
     revalidatePath('/admin');
@@ -105,13 +103,13 @@ export async function updateVideo(id: string, data: Partial<NewVideo> & { catego
         // Wipe and rewrite categories (simplest impl)
         await db.delete(videoCategories).where(eq(videoCategories.videoId, id));
         for (const catName of data.categories) {
-            let cat = await db.select().from(categories).where(eq(categories.name, catName)).get();
-            if (!cat) {
-                const catId = crypto.randomUUID();
-                await db.insert(categories).values({ id: catId, name: catName });
-                cat = { id: catId, name: catName };
+            const catResults = await db.select().from(categories).where(eq(categories.name, catName));
+            const cat = catResults[0];
+            if (cat) {
+                // Only link if category exists
+                await db.insert(videoCategories).values({ videoId: id, categoryId: cat.id });
             }
-            await db.insert(videoCategories).values({ videoId: id, categoryId: cat.id });
+            // Skip if category doesn't exist (don't auto-create)
         }
     }
 
@@ -140,7 +138,8 @@ export async function getUsers() {
 
 export async function createUser(data: Omit<NewUser, 'id' | 'createdAt'>) {
     // Check if exists
-    const existing = await db.select().from(users).where(eq(users.email, data.email)).get();
+    const existingResults = await db.select().from(users).where(eq(users.email, data.email));
+    const existing = existingResults[0];
     if (existing) return { success: false, error: 'User already exists' };
 
     await db.insert(users).values({
@@ -166,7 +165,8 @@ export async function bulkUpsertUsers(usersList: any[]) {
     for (const u of usersList) {
         // u = { email, client, role, action }
         try {
-            const existing = await db.select().from(users).where(eq(users.email, u.email)).get();
+            const existingResults = await db.select().from(users).where(eq(users.email, u.email));
+            const existing = existingResults[0];
 
             if (u.action === 'DELETE') {
                 if (existing) {
@@ -216,7 +216,8 @@ export async function getSeries() {
 }
 
 export async function createSeries(title: string) {
-    const existing = await db.select().from(series).where(eq(series.title, title)).get();
+    const existingResults = await db.select().from(series).where(eq(series.title, title));
+    const existing = existingResults[0];
     if (existing) return { success: false, error: 'Series exists' };
 
     await db.insert(series).values({
@@ -229,7 +230,8 @@ export async function createSeries(title: string) {
 
 export async function updateSeries(oldTitle: string, newTitle: string) {
     // Find ID
-    const s = await db.select().from(series).where(eq(series.title, oldTitle)).get();
+    const sResults = await db.select().from(series).where(eq(series.title, oldTitle));
+    const s = sResults[0];
     if (!s) return { success: false, error: 'Not found' };
 
     await db.update(series).set({ title: newTitle }).where(eq(series.id, s.id));
@@ -240,7 +242,8 @@ export async function updateSeries(oldTitle: string, newTitle: string) {
 export async function deleteSeries(title: string) {
     // Drizzle references set null automatically if configured, or we do it manually?
     // Schema says "onDelete: set null"
-    const s = await db.select().from(series).where(eq(series.title, title)).get();
+    const sResults = await db.select().from(series).where(eq(series.title, title));
+    const s = sResults[0];
     if (s) {
         await db.delete(series).where(eq(series.id, s.id));
     }
@@ -258,7 +261,8 @@ export async function getCategories() {
 export async function createCategoriesBulk(names: string[]) {
     let count = 0;
     for (const name of names) {
-        const existing = await db.select().from(categories).where(eq(categories.name, name)).get();
+        const existingResults = await db.select().from(categories).where(eq(categories.name, name));
+        const existing = existingResults[0];
         if (!existing) {
             await db.insert(categories).values({
                 id: crypto.randomUUID(),
@@ -273,7 +277,8 @@ export async function createCategoriesBulk(names: string[]) {
 
 export async function deleteCategory(name: string) {
     // Find category by name
-    const cat = await db.select().from(categories).where(eq(categories.name, name)).get();
+    const catResults = await db.select().from(categories).where(eq(categories.name, name));
+    const cat = catResults[0];
     if (cat) {
         // Delete will cascade to videoCategories due to schema onDelete: 'cascade'
         await db.delete(categories).where(eq(categories.id, cat.id));

@@ -76,6 +76,7 @@ export default function AdminPage() {
     const [singleUser, setSingleUser] = useState({ email: '', client: '', role: 'CLIENT' });
     const [userBulkText, setUserBulkText] = useState('');
     const [catBulkText, setCatBulkText] = useState('');
+    const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
     const [userFilter, setUserFilter] = useState({ text: '', role: 'ALL' });
 
     // --- EFFECT: DATA FETCHING ---
@@ -263,9 +264,7 @@ export default function AdminPage() {
         const headers = 'email,client,role,action';
         const rows = users.map(u => `${u.email},${u.client},${u.role},UPDATE`);
         const csvContent = [headers, ...rows].join('\n');
-        // Add UTF-8 BOM to ensure Excel recognizes the encoding correctly
-        const BOM = '\uFEFF';
-        const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -323,27 +322,54 @@ export default function AdminPage() {
         loadAllData();
     };
 
+    const handleBulkDeleteCategories = async () => {
+        if (selectedCategories.length === 0) {
+            alert('Selecciona al menos una categoría para eliminar');
+            return;
+        }
+        if (!confirm(`¿Eliminar ${selectedCategories.length} categorías? Se desvincularán de todos los vídeos.`)) return;
+
+        let deletedCount = 0;
+        for (const cat of selectedCategories) {
+            try {
+                await deleteCategory(cat);
+                deletedCount++;
+            } catch (err) {
+                console.error(`Error eliminando categoría ${cat}:`, err);
+            }
+        }
+
+        setSelectedCategories([]);
+        loadAllData();
+        alert(`${deletedCount} categorías eliminadas correctamente`);
+    };
+
+    const toggleCategorySelection = (categoryName: string) => {
+        setSelectedCategories(prev =>
+            prev.includes(categoryName)
+                ? prev.filter(c => c !== categoryName)
+                : [...prev, categoryName]
+        );
+    };
+
+    const toggleAllCategories = () => {
+        if (selectedCategories.length === categories.length) {
+            setSelectedCategories([]);
+        } else {
+            setSelectedCategories([...categories]);
+        }
+    };
+
     // -- CSV VIDEOS --
     const downloadVideosCSV = () => {
         const headers = 'id,title,url,series,author,categories,action';
         const rows = videos.map(v => {
-            const cats = v.categories.join('|'); // Use pipe instead of semicolon
-            // Proper CSV escaping: wrap fields in quotes if they contain commas, semicolons, quotes, or newlines
-            const escapeCSV = (field: string | undefined | null) => {
-                if (!field) return '';
-                const str = String(field);
-                // Wrap in quotes if contains comma, semicolon, quote, or newline
-                if (str.includes(',') || str.includes(';') || str.includes('"') || str.includes('\n')) {
-                    return `"${str.replace(/"/g, '""')}"`;
-                }
-                return str;
-            };
-            return `${escapeCSV(v.id)},${escapeCSV(v.title)},${escapeCSV(v.url)},${escapeCSV(v.series)},${escapeCSV(v.author)},${escapeCSV(cats)},UPDATE`;
+            const cats = v.categories.join(';');
+            const clean = (s: string | undefined) => (s || '').replace(/,/g, ' ');
+            return `${v.id},${clean(v.title)},${clean(v.url)},${clean(v.series)},${clean(v.author)},${cats},UPDATE`;
         });
         const csvContent = [headers, ...rows].join('\n');
-        // Add UTF-8 BOM to ensure Excel recognizes the encoding correctly
-        const BOM = '\uFEFF';
-        const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -366,39 +392,19 @@ export default function AdminPage() {
             const allSeries = await getSeries(); // Fetch latest for ID mapping
             const errorDetails: string[] = [];
 
+            console.log(`📊 Total de líneas en CSV: ${lines.length}`);
+            console.log(`🔍 Separador detectado: "${separator}"`);
             console.log(`📊 Procesando ${lines.length - 1} filas del CSV...`);
+            if (lines.length > 0) {
+                console.log(`📄 Primera línea (headers): ${lines[0]}`);
+            }
+            if (lines.length > 1) {
+                console.log(`📄 Segunda línea (ejemplo): ${lines[1]}`);
+            }
 
             for (let i = 1; i < lines.length; i++) {
                 try {
-                    // Proper CSV parsing: handle quoted fields
-                    const parseCSVLine = (line: string, separator: string) => {
-                        const result = [];
-                        let current = '';
-                        let inQuotes = false;
-
-                        for (let j = 0; j < line.length; j++) {
-                            const char = line[j];
-                            const nextChar = line[j + 1];
-
-                            if (char === '"') {
-                                if (inQuotes && nextChar === '"') {
-                                    current += '"';
-                                    j++; // Skip next quote
-                                } else {
-                                    inQuotes = !inQuotes;
-                                }
-                            } else if (char === separator && !inQuotes) {
-                                result.push(current.trim());
-                                current = '';
-                            } else {
-                                current += char;
-                            }
-                        }
-                        result.push(current.trim());
-                        return result;
-                    };
-
-                    const parts = parseCSVLine(lines[i], separator);
+                    const parts = lines[i].split(separator);
 
                     // More lenient validation - at least title and URL
                     if (parts.length < 2) {
@@ -416,19 +422,20 @@ export default function AdminPage() {
                         continue;
                     }
 
-                    const action = (actionRaw || 'CREATE').toUpperCase(); // Default to CREATE for new imports
-                    const cats = catsRaw ? catsRaw.split('|').map(c => c.trim()).filter(Boolean) : []; // Use pipe instead of semicolon
+                    const action = (actionRaw || 'CREATE').toUpperCase();
+                    const cats = catsRaw ? catsRaw.split(';').map(c => c.trim()).filter(Boolean) : [];
 
 
                     const seriesObj = allSeries.find(s => s.title === seriesName);
 
                     if (action === 'DELETE') {
-                        if (id) {
-                            await deleteVideo(id);
+                        const trimmedId = id?.trim();
+                        if (trimmedId && trimmedId.length > 0) {
+                            await deleteVideo(trimmedId);
                             stats.deleted++;
-                            console.log(`✅ Fila ${i + 1}: Video eliminado (${title})`);
+                            console.log(`✅ Fila ${i + 1}: Video eliminado (ID: ${trimmedId})`);
                         } else {
-                            errorDetails.push(`Fila ${i + 1}: DELETE requiere ID`);
+                            errorDetails.push(`Fila ${i + 1}: DELETE requiere ID válido (recibido: "${id}")`);
                             stats.errors++;
                         }
                     } else if (action === 'UPDATE' && id) {
@@ -722,16 +729,54 @@ export default function AdminPage() {
                                 </div>
                             </section>
                             <section>
-                                <h2 style={{ fontSize: '1.25rem', marginBottom: '1rem', color: 'var(--primary)' }}>Categorías ({categories.length})</h2>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', backgroundColor: 'var(--background-card)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)', maxHeight: '500px', overflowY: 'auto' }}>
-                                    {categories.map(cat => (
-                                        <div key={cat} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem', backgroundColor: 'white', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
-                                            <span style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 500 }}>{cat}</span>
-                                            <button onClick={() => handleDeleteCategory(cat)} style={{ padding: '0.4rem 0.8rem', borderRadius: '6px', backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}>🗑️ Eliminar</button>
-                                        </div>
-                                    ))}
-                                    {categories.length === 0 && <p style={{ color: 'var(--text-secondary)', fontStyle: 'italic', textAlign: 'center', padding: '1rem' }}>No hay categorías creadas.</p>}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                    <h2 style={{ fontSize: '1.25rem', margin: 0, color: 'var(--primary)' }}>Categorías ({categories.length})</h2>
+                                    {selectedCategories.length > 0 && (
+                                        <button
+                                            onClick={handleBulkDeleteCategories}
+                                            style={{
+                                                padding: '0.6rem 1.2rem',
+                                                borderRadius: '8px',
+                                                backgroundColor: '#dc2626',
+                                                color: 'white',
+                                                fontWeight: 600,
+                                                border: 'none',
+                                                cursor: 'pointer',
+                                                fontSize: '0.9rem'
+                                            }}
+                                        >
+                                            🗑️ Eliminar seleccionadas ({selectedCategories.length})
+                                        </button>
+                                    )}
                                 </div>
+                                <div style={{ backgroundColor: 'var(--background-card)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)', maxHeight: '500px', overflowY: 'auto' }}>
+                                    {categories.length > 0 && (
+                                        <div style={{ display: 'flex', alignItems: 'center', padding: '0.75rem', backgroundColor: '#f0f9ff', border: '1px solid #0ea5e9', borderRadius: '8px', marginBottom: '0.75rem' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedCategories.length === categories.length}
+                                                onChange={toggleAllCategories}
+                                                style={{ marginRight: '0.75rem', cursor: 'pointer', width: '18px', height: '18px' }}
+                                            />
+                                            <span style={{ fontSize: '0.9rem', color: '#0369a1', fontWeight: 600 }}>Seleccionar todas</span>
+                                        </div>
+                                    )}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                        {categories.map(cat => (
+                                            <div key={cat} style={{ display: 'flex', alignItems: 'center', padding: '0.75rem', backgroundColor: 'white', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedCategories.includes(cat)}
+                                                    onChange={() => toggleCategorySelection(cat)}
+                                                    style={{ marginRight: '0.75rem', cursor: 'pointer', width: '18px', height: '18px' }}
+                                                />
+                                                <span style={{ flex: 1, fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 500 }}>{cat}</span>
+                                                <button onClick={() => handleDeleteCategory(cat)} style={{ padding: '0.4rem 0.8rem', borderRadius: '6px', backgroundColor: '#fee2e2', color: '#991b1b', border: 'none', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}>🗑️ Eliminar</button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                                {categories.length === 0 && <p style={{ color: 'var(--text-secondary)', fontStyle: 'italic', textAlign: 'center', padding: '1rem' }}>No hay categorías creadas.</p>}
                             </section>
                         </div>
                     )}
@@ -766,34 +811,36 @@ export default function AdminPage() {
                         </div>
                     )}
                 </div>
-            </div>
+            </div >
 
             {/* --- MODAL EDIT VIDEO --- */}
-            {editingVideo && (
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 100 }}>
-                    <div style={{ backgroundColor: 'white', padding: '2rem', borderRadius: '12px', width: '90%', maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
-                        <h2 style={{ marginBottom: '1.5rem', color: 'var(--primary)' }}>Editar Vídeo</h2>
-                        <form onSubmit={handleSaveEditedVideo} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            <div><label>Título</label><input type="text" value={editingVideo.title} onChange={e => setEditingVideo({ ...editingVideo, title: e.target.value })} style={{ width: '100%', padding: '0.7rem', border: '1px solid var(--border-color)', borderRadius: '6px' }} /></div>
-                            <div><label>URL</label><input type="text" value={editingVideo.url} onChange={e => setEditingVideo({ ...editingVideo, url: e.target.value })} style={{ width: '100%', padding: '0.7rem', border: '1px solid var(--border-color)', borderRadius: '6px' }} /></div>
-                            <div><label>Serie</label><select value={editingVideo.series || ''} onChange={e => setEditingVideo({ ...editingVideo, series: e.target.value || undefined })} style={{ width: '100%', padding: '0.7rem', border: '1px solid var(--border-color)', borderRadius: '6px' }}><option value="">-- Sin Serie --</option>{seriesList.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-                            <div>
-                                <label>Categorías</label>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                    {categories.map(cat => {
-                                        const isSelected = editingVideo.categories.includes(cat);
-                                        return <button key={cat} type="button" onClick={() => { const newCats = isSelected ? editingVideo.categories.filter(c => c !== cat) : [...editingVideo.categories, cat]; setEditingVideo({ ...editingVideo, categories: newCats }); }} style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', cursor: 'pointer', backgroundColor: isSelected ? 'var(--primary)' : '#f1f5f9', color: isSelected ? 'white' : 'black', border: 'none' }}>{cat}</button>
-                                    })}
+            {
+                editingVideo && (
+                    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 100 }}>
+                        <div style={{ backgroundColor: 'white', padding: '2rem', borderRadius: '12px', width: '90%', maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
+                            <h2 style={{ marginBottom: '1.5rem', color: 'var(--primary)' }}>Editar Vídeo</h2>
+                            <form onSubmit={handleSaveEditedVideo} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                <div><label>Título</label><input type="text" value={editingVideo.title} onChange={e => setEditingVideo({ ...editingVideo, title: e.target.value })} style={{ width: '100%', padding: '0.7rem', border: '1px solid var(--border-color)', borderRadius: '6px' }} /></div>
+                                <div><label>URL</label><input type="text" value={editingVideo.url} onChange={e => setEditingVideo({ ...editingVideo, url: e.target.value })} style={{ width: '100%', padding: '0.7rem', border: '1px solid var(--border-color)', borderRadius: '6px' }} /></div>
+                                <div><label>Serie</label><select value={editingVideo.series || ''} onChange={e => setEditingVideo({ ...editingVideo, series: e.target.value || undefined })} style={{ width: '100%', padding: '0.7rem', border: '1px solid var(--border-color)', borderRadius: '6px' }}><option value="">-- Sin Serie --</option>{seriesList.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+                                <div>
+                                    <label>Categorías</label>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                        {categories.map(cat => {
+                                            const isSelected = editingVideo.categories.includes(cat);
+                                            return <button key={cat} type="button" onClick={() => { const newCats = isSelected ? editingVideo.categories.filter(c => c !== cat) : [...editingVideo.categories, cat]; setEditingVideo({ ...editingVideo, categories: newCats }); }} style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', cursor: 'pointer', backgroundColor: isSelected ? 'var(--primary)' : '#f1f5f9', color: isSelected ? 'white' : 'black', border: 'none' }}>{cat}</button>
+                                        })}
+                                    </div>
                                 </div>
-                            </div>
-                            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                                <button type="submit" style={{ flex: 1, padding: '0.8rem', backgroundColor: 'var(--primary)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>Guardar</button>
-                                <button type="button" onClick={() => setEditingVideo(null)} style={{ flex: 1, padding: '0.8rem', backgroundColor: '#e2e8f0', color: 'black', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>Cancelar</button>
-                            </div>
-                        </form>
+                                <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                                    <button type="submit" style={{ flex: 1, padding: '0.8rem', backgroundColor: 'var(--primary)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>Guardar</button>
+                                    <button type="button" onClick={() => setEditingVideo(null)} style={{ flex: 1, padding: '0.8rem', backgroundColor: '#e2e8f0', color: 'black', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>Cancelar</button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
-                </div>
-            )}
-        </main>
+                )
+            }
+        </main >
     );
 }
